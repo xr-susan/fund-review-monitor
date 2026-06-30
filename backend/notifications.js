@@ -4,6 +4,63 @@
 
 import nodemailer from 'nodemailer'
 
+export const DEFAULT_ALERT_RULES = [
+  { id: 'daily-drop', type: 'fund_drop', fundCode: 'all', threshold: 3, enabled: true },
+  { id: 'daily-rise', type: 'fund_rise', fundCode: 'all', threshold: 5, enabled: false },
+  { id: 'rank-drop', type: 'rank_drop', fundCode: 'all', threshold: 70, enabled: false },
+  { id: 'drawdown', type: 'drawdown', fundCode: 'all', threshold: 10, enabled: true }
+]
+
+export const DEFAULT_NOTIFICATION_TEMPLATES = {
+  fund_drop: {
+    title: '基金跌幅预警: {{fundName}}',
+    content: '{{fundName}}({{fundCode}}) 当日跌幅 {{value}}%，超过预设阈值 {{threshold}}%。'
+  },
+  fund_rise: {
+    title: '基金涨幅提醒: {{fundName}}',
+    content: '{{fundName}}({{fundCode}}) 当日涨幅 {{value}}%，超过预设阈值 {{threshold}}%。'
+  },
+  rank_drop: {
+    title: '排名下滑预警: {{fundName}}',
+    content: '{{fundName}}({{fundCode}}) 当前排名分位 {{value}}%，超过预设阈值 {{threshold}}%。'
+  },
+  drawdown: {
+    title: '回撤预警: {{fundName}}',
+    content: '{{fundName}}({{fundCode}}) 最大回撤 {{value}}%，超过预设阈值 {{threshold}}%。'
+  }
+}
+
+export function renderTemplate(template, context) {
+  return String(template || '').replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    const value = context[key]
+    return value === undefined || value === null ? '' : String(value)
+  })
+}
+
+export function buildAlert(rule, fund, payload, templates = DEFAULT_NOTIFICATION_TEMPLATES) {
+  const template = {
+    ...(templates[rule.type] || {}),
+    ...(rule.template || {})
+  }
+  const context = {
+    fundCode: fund.code,
+    fundName: fund.name,
+    ruleType: rule.type,
+    threshold: payload.threshold,
+    value: payload.value
+  }
+
+  return {
+    type: rule.type,
+    title: renderTemplate(template.title, context),
+    content: renderTemplate(template.content, context),
+    level: payload.level,
+    fund: fund.code,
+    value: payload.rawValue ?? payload.value,
+    threshold: payload.rawThreshold ?? payload.threshold
+  }
+}
+
 // 邮件配置（需要用户配置）
 let emailConfig = null
 let emailTransporter = null
@@ -242,9 +299,10 @@ export const notificationManager = new NotificationManager()
  * 预警检查器
  */
 export class AlertChecker {
-  constructor(fundData, rules) {
+  constructor(fundData, rules = DEFAULT_ALERT_RULES, options = {}) {
     this.fundData = fundData
     this.rules = rules
+    this.templates = options.templates || DEFAULT_NOTIFICATION_TEMPLATES
   }
 
   /**
@@ -296,13 +354,13 @@ export class AlertChecker {
     for (const fund of funds) {
       if (fund.dayChange && fund.dayChange < -rule.threshold) {
         return {
-          type: rule.type,
-          title: `基金跌幅预警: ${fund.name}`,
-          content: `${fund.name}(${fund.code}) 当日跌幅 ${fund.dayChange.toFixed(2)}%，超过预设阈值 ${rule.threshold}%`,
-          level: 'warning',
-          fund: fund.code,
-          value: fund.dayChange,
-          threshold: -rule.threshold
+          ...buildAlert(rule, fund, {
+            level: 'warning',
+            value: Math.abs(fund.dayChange).toFixed(2),
+            threshold: rule.threshold,
+            rawValue: fund.dayChange,
+            rawThreshold: -rule.threshold
+          }, this.templates)
         }
       }
     }
@@ -321,13 +379,13 @@ export class AlertChecker {
     for (const fund of funds) {
       if (fund.dayChange && fund.dayChange > rule.threshold) {
         return {
-          type: rule.type,
-          title: `基金涨幅预警: ${fund.name}`,
-          content: `${fund.name}(${fund.code}) 当日涨幅 ${fund.dayChange.toFixed(2)}%，超过预设阈值 ${rule.threshold}%`,
-          level: 'info',
-          fund: fund.code,
-          value: fund.dayChange,
-          threshold: rule.threshold
+          ...buildAlert(rule, fund, {
+            level: 'info',
+            value: fund.dayChange.toFixed(2),
+            threshold: rule.threshold,
+            rawValue: fund.dayChange,
+            rawThreshold: rule.threshold
+          }, this.templates)
         }
       }
     }
@@ -356,13 +414,13 @@ export class AlertChecker {
         const percentile = (fund.rank / fund.rankTotal) * 100
         if (percentile > rule.threshold) {
           return {
-            type: rule.type,
-            title: `排名下滑预警: ${fund.name}`,
-            content: `${fund.name}(${fund.code}) 排名 ${fund.rank}/${fund.rankTotal}，跌出前 ${rule.threshold}%`,
-            level: 'warning',
-            fund: fund.code,
-            value: percentile,
-            threshold: rule.threshold
+            ...buildAlert(rule, fund, {
+              level: 'warning',
+              value: percentile.toFixed(2),
+              threshold: rule.threshold,
+              rawValue: percentile,
+              rawThreshold: rule.threshold
+            }, this.templates)
           }
         }
       }
@@ -382,13 +440,13 @@ export class AlertChecker {
     for (const fund of funds) {
       if (fund.maxDrawdown && Math.abs(fund.maxDrawdown) > rule.threshold) {
         return {
-          type: rule.type,
-          title: `回撤预警: ${fund.name}`,
-          content: `${fund.name}(${fund.code}) 最大回撤 ${fund.maxDrawdown}%，超过预设阈值 ${rule.threshold}%`,
-          level: 'danger',
-          fund: fund.code,
-          value: fund.maxDrawdown,
-          threshold: -rule.threshold
+          ...buildAlert(rule, fund, {
+            level: 'danger',
+            value: Math.abs(fund.maxDrawdown).toFixed(2),
+            threshold: rule.threshold,
+            rawValue: fund.maxDrawdown,
+            rawThreshold: -rule.threshold
+          }, this.templates)
         }
       }
     }

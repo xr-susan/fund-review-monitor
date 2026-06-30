@@ -36,6 +36,8 @@ import {
 } from './cache.js'
 import {
   configureEmail,
+  DEFAULT_ALERT_RULES,
+  DEFAULT_NOTIFICATION_TEMPLATES,
   notificationManager
 } from './notifications.js'
 import { initDatabase } from './database.js'
@@ -791,6 +793,13 @@ app.delete('/api/cache/all', authMiddleware, requireRole('admin'), (req, res) =>
 app.get('/api/notifications/channels', authMiddleware, (req, res) => {
   const channels = notificationManager.getChannels()
   res.json({ channels })
+})
+
+app.get('/api/notifications/rules/defaults', authMiddleware, (req, res) => {
+  res.json({
+    rules: DEFAULT_ALERT_RULES,
+    templates: DEFAULT_NOTIFICATION_TEMPLATES
+  })
 })
 
 /**

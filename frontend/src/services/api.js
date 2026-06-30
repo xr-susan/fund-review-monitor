@@ -235,6 +235,23 @@ export const exportApi = {
   }
 }
 
+export const notificationApi = {
+  getChannels: () => request('/notifications/channels'),
+  getDefaultRules: () => request('/notifications/rules/defaults'),
+  addChannel: (channel) => request('/notifications/channels', {
+    method: 'POST',
+    body: JSON.stringify(channel)
+  }),
+  removeChannel: (id) => request(`/notifications/channels/${id}`, {
+    method: 'DELETE'
+  }),
+  getHistory: (limit = 50) => request(`/notifications/history?limit=${limit}`),
+  testChannel: (channelId) => request('/notifications/test', {
+    method: 'POST',
+    body: JSON.stringify({ channelId })
+  })
+}
+
 /**
  * 下载 Blob 文件
  */

@@ -4,6 +4,10 @@ node_modules/
 # Build output
 dist/
 coverage/
+playwright-report/
+test-results/
+frontend/playwright-report/
+frontend/test-results/
 
 # Local environment
 .env

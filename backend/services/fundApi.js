@@ -1,5 +1,42 @@
 import axios from 'axios'
 
+const DEFAULT_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+}
+
+export async function requestFirstAvailable(providers, options = {}) {
+  const {
+    isValid = value => value !== null && value !== undefined,
+    defaultValue = null,
+    logger = console
+  } = options
+
+  const errors = []
+
+  for (const provider of providers) {
+    try {
+      const value = await provider.fetch()
+      if (isValid(value)) {
+        return {
+          data: value,
+          provider: provider.name,
+          errors
+        }
+      }
+      errors.push({ provider: provider.name, error: 'empty response' })
+    } catch (error) {
+      errors.push({ provider: provider.name, error: error.message })
+      logger.warn?.(`Data provider failed: ${provider.name}`, error.message)
+    }
+  }
+
+  return {
+    data: defaultValue,
+    provider: null,
+    errors
+  }
+}
+
 // 天天基金 / 东方财富 API 接口
 
 /**
@@ -34,7 +71,22 @@ export async function getFundEstimate(fundCode) {
     }
   } catch (error) {
     console.error(`获取基金 ${fundCode} 估值失败:`, error.message)
-    return null
+    const fallbackHistory = await getFundNavHistory(fundCode, 1)
+    const latest = fallbackHistory[0]
+    if (!latest) return null
+
+    return {
+      code: fundCode,
+      name: '',
+      nav: latest.nav,
+      estimateNav: latest.nav,
+      estimateChange: latest.change || 0,
+      navDate: latest.date,
+      estimateTime: new Date().toISOString(),
+      lastNav: latest.nav,
+      lastChange: latest.change || 0,
+      dataSource: 'nav-history-fallback'
+    }
   }
 }
 
@@ -208,7 +260,21 @@ export async function getFundHoldings(fundCode) {
  * @param {string} stockCode - 股票代码
  */
 export async function getStockPrice(stockCode) {
-  try {
+  const { data } = await requestFirstAvailable([
+    {
+      name: 'sina-stock',
+      fetch: () => getSinaStockPrice(stockCode)
+    },
+    {
+      name: 'eastmoney-stock',
+      fetch: () => getEastmoneyStockPrice(stockCode)
+    }
+  ])
+
+  return data
+}
+
+async function getSinaStockPrice(stockCode) {
     // 使用新浪财经 API（更稳定）
     const prefix = stockCode.startsWith('6') ? 'sh' : 'sz'
     const symbol = `${prefix}${stockCode}`
@@ -253,11 +319,57 @@ export async function getStockPrice(stockCode) {
       }
     }
 
-    return null
-  } catch (error) {
-    console.error(`获取股票 ${stockCode} 价格失败:`, error.message)
-    return null
+    throw new Error('Sina stock quote returned no usable data')
+}
+
+async function getEastmoneyStockPrice(stockCode) {
+  const secid = `${stockCode.startsWith('6') ? '1' : '0'}.${stockCode}`
+  const response = await axios.get('https://push2.eastmoney.com/api/qt/stock/get', {
+    params: {
+      secid,
+      fields: 'f43,f44,f45,f46,f47,f48,f57,f58,f60,f168,f169'
+    },
+    headers: {
+      ...DEFAULT_HEADERS,
+      Referer: 'https://quote.eastmoney.com/'
+    },
+    timeout: 10000
+  })
+
+  const quote = response.data?.data
+  if (!quote) {
+    throw new Error('Eastmoney stock quote returned no usable data')
   }
+
+  const price = normalizeEastmoneyPrice(quote.f43)
+  const yesterdayClose = normalizeEastmoneyPrice(quote.f60)
+  const change = yesterdayClose > 0 ? ((price - yesterdayClose) / yesterdayClose * 100) : 0
+
+  return {
+    code: stockCode,
+    name: quote.f58 || '',
+    price,
+    open: normalizeEastmoneyPrice(quote.f46),
+    high: normalizeEastmoneyPrice(quote.f44),
+    low: normalizeEastmoneyPrice(quote.f45),
+    volume: quote.f47 || 0,
+    amount: quote.f48 || 0,
+    change: parseFloat(change.toFixed(2)),
+    changeAmount: normalizeEastmoneyPrice(quote.f169),
+    yesterdayClose,
+    pe: normalizeEastmoneyPrice(quote.f168),
+    pb: 0,
+    marketCap: 0,
+    timestamp: new Date().toISOString(),
+    dataSource: 'eastmoney-stock'
+  }
+}
+
+function normalizeEastmoneyPrice(value) {
+  if (value === undefined || value === null || value === '-') return 0
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  return parseFloat((numeric / 100).toFixed(2))
 }
 
 /**
@@ -345,7 +457,21 @@ export async function getFundRanking(type = 'hh', pageSize = 20) {
  * @param {string} indexCode - 指数代码 (如: 1.000300, 1.000905, 0.399006)
  */
 export async function getIndexQuote(indexCode) {
-  try {
+  const { data } = await requestFirstAvailable([
+    {
+      name: 'tencent-index',
+      fetch: () => getTencentIndexQuote(indexCode)
+    },
+    {
+      name: 'eastmoney-index',
+      fetch: () => getEastmoneyIndexQuote(indexCode)
+    }
+  ])
+
+  return data
+}
+
+async function getTencentIndexQuote(indexCode) {
     // 使用腾讯财经 API 获取指数数据
     const codeMap = {
       '1.000300': 'sh000300',
@@ -399,10 +525,48 @@ export async function getIndexQuote(indexCode) {
       }
     }
 
-    return null
-  } catch (error) {
-    console.error(`获取指数 ${indexCode} 行情失败:`, error.message)
-    return null
+    throw new Error('Tencent index quote returned no usable data')
+}
+
+async function getEastmoneyIndexQuote(indexCode) {
+  const secid = indexCode
+  const response = await axios.get('https://push2.eastmoney.com/api/qt/stock/get', {
+    params: {
+      secid,
+      fields: 'f43,f44,f45,f46,f57,f58,f60,f169,f170'
+    },
+    headers: {
+      ...DEFAULT_HEADERS,
+      Referer: 'https://quote.eastmoney.com/'
+    },
+    timeout: 10000
+  })
+
+  const quote = response.data?.data
+  if (!quote) {
+    throw new Error('Eastmoney index quote returned no usable data')
+  }
+
+  const price = normalizeEastmoneyPrice(quote.f43)
+  const yearStartPrices = {
+    '1.000300': 3900,
+    '1.000905': 5500,
+    '0.399006': 2100
+  }
+  const yearStartPrice = yearStartPrices[indexCode] || 0
+  const yearChange = yearStartPrice > 0 ? ((price - yearStartPrice) / yearStartPrice * 100) : 0
+
+  return {
+    code: indexCode,
+    name: quote.f58 || '',
+    price,
+    change: normalizeEastmoneyPrice(quote.f170),
+    yearChange: parseFloat(yearChange.toFixed(2)),
+    open: normalizeEastmoneyPrice(quote.f46),
+    high: normalizeEastmoneyPrice(quote.f44),
+    low: normalizeEastmoneyPrice(quote.f45),
+    yesterdayClose: normalizeEastmoneyPrice(quote.f60),
+    dataSource: 'eastmoney-index'
   }
 }
 
@@ -470,7 +634,24 @@ export async function getBatchIndexQuotes() {
  * @param {string} keyword - 搜索关键词
  */
 export async function searchFund(keyword) {
-  try {
+  const { data } = await requestFirstAvailable([
+    {
+      name: 'eastmoney-suggest',
+      fetch: () => searchFundFromSuggest(keyword)
+    },
+    {
+      name: 'eastmoney-fundcode',
+      fetch: () => searchFundFromFundCode(keyword)
+    }
+  ], {
+    defaultValue: [],
+    isValid: value => Array.isArray(value) && value.length > 0
+  })
+
+  return data
+}
+
+async function searchFundFromSuggest(keyword) {
     // 使用东方财富的基金搜索 API
     const url = `http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx`
     const response = await axios.get(url, {
@@ -495,6 +676,10 @@ export async function searchFund(keyword) {
       }))
     }
 
+    throw new Error('Eastmoney suggest returned no results')
+}
+
+async function searchFundFromFundCode(keyword) {
     // 如果东方财富 API 返回空，尝试使用天天基金的搜索 API
     const ttjjUrl = `http://fund.eastmoney.com/js/fundcode_search.js`
     const ttjjResponse = await axios.get(ttjjUrl, {
@@ -530,9 +715,5 @@ export async function searchFund(keyword) {
       return results
     }
 
-    return []
-  } catch (error) {
-    console.error('搜索基金失败:', error.message)
-    return []
-  }
+    throw new Error('Fund code search returned no results')
 }
