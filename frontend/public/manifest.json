@@ -1,0 +1,26 @@
+{
+  "name": "基金复盘监控系统",
+  "short_name": "基金监控",
+  "description": "专业的基金复盘分析平台，实时追踪自选基金、深度分析持仓、记录投资决策",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "utilities"],
+  "lang": "zh-CN"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "fund-review-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fund review and watchlist monitoring system with React, Express, and SQLite.",
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "test": "npm --prefix backend test",
+    "build": "npm --prefix frontend run build",
+    "start:backend": "npm --prefix backend start",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
