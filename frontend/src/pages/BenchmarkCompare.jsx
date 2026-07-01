@@ -15,6 +15,17 @@ const chartTooltipStyle = {
   boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.08)'
 }
 
+const toNumberOrNull = (value) => {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+const formatPercent = (value) => {
+  const number = toNumberOrNull(value)
+  if (number === null) return '--'
+  return `${number >= 0 ? '+' : ''}${number.toFixed(2)}%`
+}
+
 /**
  * 基准对比图表 - 使用真实历史数据
  */
@@ -63,8 +74,8 @@ const BenchmarkChart = ({ funds, benchmarkKey, benchmark }) => {
           if (history) {
             const item = history.find(h => h.date === date)
             if (item) {
-              const baseNav = baseNavs[fund.code]
-              entry[fund.name] = baseNav ? ((item.nav / baseNav) * 100).toFixed(2) : null
+          const baseNav = baseNavs[fund.code]
+          entry[fund.name] = baseNav ? Number(((item.nav / baseNav) * 100).toFixed(2)) : null
             }
           }
         })
@@ -139,9 +150,10 @@ const ExcessReturnTable = ({ funds, benchmarkKey, benchmark }) => {
         </thead>
         <tbody>
           {funds.map((fund, index) => {
-            const fundReturn = Number(fund.yearChange) || 0
-            const benchReturn = Number(benchData?.yearChange) || 0
-            const excess = fundReturn - benchReturn
+            const fundReturn = toNumberOrNull(fund.yearChange)
+            const benchReturn = toNumberOrNull(benchData?.yearChange) ?? 0
+            const effectiveFundReturn = fundReturn ?? 0
+            const excess = effectiveFundReturn - benchReturn
             const infoRatio = benchReturn !== 0 ? (excess / Math.abs(benchReturn) * 0.5).toFixed(2) : 'N/A'
 
             return (
@@ -151,9 +163,9 @@ const ExcessReturnTable = ({ funds, benchmarkKey, benchmark }) => {
                   <div className="text-xs text-gray-500">{fund.code}</div>
                 </td>
                 <td className={`text-right py-3 px-2 font-medium ${
-                  fundReturn >= 0 ? 'text-stock-up' : 'text-stock-down'
+                  effectiveFundReturn >= 0 ? 'text-stock-up' : 'text-stock-down'
                 }`}>
-                  {fundReturn >= 0 ? '+' : ''}{fundReturn.toFixed(2)}%
+                  {formatPercent(fundReturn)}
                 </td>
                 <td className={`text-right py-3 px-2 ${
                   benchReturn >= 0 ? 'text-stock-up' : 'text-stock-down'
@@ -215,16 +227,16 @@ const FundComparisonTable = () => {
                 <div className="text-xs text-gray-500">{fund.type || '混合型'}</div>
               </td>
               <td className={`text-right py-3 px-2 ${Number(fund.dayChange) >= 0 ? 'text-stock-up' : 'text-stock-down'}`}>
-                {fund.dayChange != null ? `${Number(fund.dayChange) >= 0 ? '+' : ''}${Number(fund.dayChange).toFixed(2)}%` : '--'}
+                {formatPercent(fund.dayChange)}
               </td>
               <td className={`text-right py-3 px-2 ${Number(fund.weekChange) >= 0 ? 'text-stock-up' : 'text-stock-down'}`}>
-                {fund.weekChange != null ? `${Number(fund.weekChange) >= 0 ? '+' : ''}${Number(fund.weekChange).toFixed(2)}%` : '--'}
+                {formatPercent(fund.weekChange)}
               </td>
               <td className={`text-right py-3 px-2 ${Number(fund.monthChange) >= 0 ? 'text-stock-up' : 'text-stock-down'}`}>
-                {fund.monthChange != null ? `${Number(fund.monthChange) >= 0 ? '+' : ''}${Number(fund.monthChange).toFixed(2)}%` : '--'}
+                {formatPercent(fund.monthChange)}
               </td>
               <td className={`text-right py-3 px-2 font-medium ${Number(fund.yearChange) >= 0 ? 'text-stock-up' : 'text-stock-down'}`}>
-                {fund.yearChange != null ? `${Number(fund.yearChange) >= 0 ? '+' : ''}${Number(fund.yearChange).toFixed(2)}%` : '--'}
+                {formatPercent(fund.yearChange)}
               </td>
               <td className="text-right py-3 px-2 text-gray-600">{fund.sharpeRatio || '--'}</td>
               <td className="text-right py-3 px-2 text-stock-down">{fund.maxDrawdown ? `${fund.maxDrawdown}%` : '--'}</td>
@@ -239,8 +251,8 @@ const FundComparisonTable = () => {
 const RiskReturnScatter = ({ funds }) => {
   const data = funds.map(f => ({
     name: f.name.slice(0, 6),
-    risk: Math.abs(f.maxDrawdown || 15),
-    return: f.yearChange || 0,
+    risk: Math.abs(toNumberOrNull(f.maxDrawdown) ?? 15),
+    return: toNumberOrNull(f.yearChange) ?? 0,
     code: f.code
   }))
 
@@ -255,7 +267,7 @@ const RiskReturnScatter = ({ funds }) => {
             <YAxis dataKey="name" type="category" stroke="#94A3B8" tick={{ fontSize: 11 }} width={80} />
             <Tooltip
               contentStyle={chartTooltipStyle}
-              formatter={(value) => [`${value.toFixed(2)}%`, '年化收益']}
+              formatter={(value) => [formatPercent(value), '年化收益']}
             />
             <Bar dataKey="return" radius={[0, 4, 4, 0]}>
               {data.map((entry, index) => (
@@ -345,10 +357,10 @@ const BenchmarkCompare = () => {
             <div className={`text-xl font-bold ${
               Number(benchmark[benchmarkKey]?.change) >= 0 ? 'text-stock-up' : 'text-stock-down'
             }`}>
-              {benchmark[benchmarkKey]?.change != null ? `${Number(benchmark[benchmarkKey].change) >= 0 ? '+' : ''}${Number(benchmark[benchmarkKey].change).toFixed(2)}%` : '--'}
+              {formatPercent(benchmark[benchmarkKey]?.change)}
             </div>
             <div className="text-sm text-gray-500">
-              年收益: {benchmark[benchmarkKey]?.yearChange != null ? `${Number(benchmark[benchmarkKey].yearChange) >= 0 ? '+' : ''}${Number(benchmark[benchmarkKey].yearChange).toFixed(2)}%` : '--'}
+              年收益: {formatPercent(benchmark[benchmarkKey]?.yearChange)}
             </div>
           </div>
         </div>
