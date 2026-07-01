@@ -180,13 +180,32 @@ app.get('/api/funds/search', searchLimiter, validate(commonSchemas.searchFund), 
 /**
  * 计算涨跌幅
  */
+function toFiniteNumber(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function getLatestHistoryChange(navHistory) {
+  if (!Array.isArray(navHistory) || navHistory.length === 0) return null
+
+  for (let i = navHistory.length - 1; i >= 0; i--) {
+    const change = toFiniteNumber(navHistory[i]?.change)
+    if (change !== null) return change
+  }
+
+  return null
+}
+
 function calculateChange(navHistory, currentNav, days) {
   if (!navHistory || navHistory.length === 0) {
     console.log(`calculateChange: 历史数据为空`)
     return null
   }
 
-  console.log(`calculateChange: 计算 ${days} 天涨跌幅, 当前净值: ${currentNav}, 历史数据条数: ${navHistory.length}`)
+  const current = toFiniteNumber(currentNav)
+  if (current === null) return null
+
+  console.log(`calculateChange: 计算 ${days} 天涨跌幅, 当前净值: ${current}, 历史数据条数: ${navHistory.length}`)
 
   // 找到N天前的净值
   const targetDate = new Date()
@@ -198,21 +217,18 @@ function calculateChange(navHistory, currentNav, days) {
   // 从后往前找，找到最接近目标日期的净值
   for (let i = navHistory.length - 1; i >= 0; i--) {
     const itemDate = new Date(navHistory[i].date)
-    if (itemDate <= targetDate) {
-      oldNav = navHistory[i].nav
+    const itemNav = toFiniteNumber(navHistory[i].nav)
+    if (itemDate <= targetDate && itemNav !== null) {
+      oldNav = itemNav
       console.log(`calculateChange: 找到历史净值: ${oldNav}, 日期: ${navHistory[i].date}`)
       break
     }
   }
 
-  // 如果找不到N天前的数据，使用最早的数据
-  if (oldNav === null && navHistory.length > 0) {
-    oldNav = navHistory[navHistory.length - 1].nav
-    console.log(`calculateChange: 使用最早净值: ${oldNav}, 日期: ${navHistory[navHistory.length - 1].date}`)
-  }
+  if (oldNav === null) return null
 
   if (oldNav && oldNav > 0) {
-    const change = ((currentNav - oldNav) / oldNav * 100).toFixed(2)
+    const change = ((current - oldNav) / oldNav * 100).toFixed(2)
     console.log(`calculateChange: 计算涨跌幅: ${change}%`)
     return change
   }
@@ -263,20 +279,25 @@ app.get('/api/funds', authMiddleware, async (req, res) => {
       }
 
       if (estimate) {
-        // 获取基金详情
-        const detail = await getFundDetail(code)
+        // 获取基金详情和历史净值
+        const [detail, navHistory] = await Promise.all([
+          getFundDetail(code),
+          getFundNavHistory(code, 365)
+        ])
 
-        // 获取历史净值计算涨跌幅
         let weekChange = null
         let monthChange = null
         let yearChange = null
+        let dayChange = toFiniteNumber(estimate.lastChange)
 
         try {
-          const navHistory = await getFundNavHistory(code, 365)
           if (navHistory && navHistory.length > 0) {
             weekChange = calculateChange(navHistory, estimate.nav, 7)
             monthChange = calculateChange(navHistory, estimate.nav, 30)
             yearChange = calculateChange(navHistory, estimate.nav, 365)
+            if (dayChange === null) {
+              dayChange = getLatestHistoryChange(navHistory)
+            }
           }
         } catch (error) {
           console.error(`计算基金 ${code} 涨跌幅失败:`, error.message)
@@ -291,7 +312,7 @@ app.get('/api/funds', authMiddleware, async (req, res) => {
           estimateChange: estimate.estimateChange,
           navDate: estimate.navDate,
           estimateTime: estimate.estimateTime,
-          dayChange: estimate.lastChange,
+          dayChange,
           weekChange: weekChange,
           monthChange: monthChange,
           yearChange: yearChange,
@@ -388,16 +409,19 @@ app.get('/api/funds/:code', async (req, res) => {
       navHistoryLength: navHistory?.length || 0
     })
 
-    // 使用 calculateChange 函数计算涨跌幅
     let weekChange = null
     let monthChange = null
     let yearChange = null
+    let dayChange = toFiniteNumber(estimate.lastChange)
 
     if (navHistory && navHistory.length > 0) {
       console.log(`开始计算涨跌幅, 历史数据条数: ${navHistory.length}`)
       weekChange = calculateChange(navHistory, estimate.nav, 7)
       monthChange = calculateChange(navHistory, estimate.nav, 30)
       yearChange = calculateChange(navHistory, estimate.nav, 365)
+      if (dayChange === null) {
+        dayChange = getLatestHistoryChange(navHistory)
+      }
       console.log(`计算结果: weekChange=${weekChange}, monthChange=${monthChange}, yearChange=${yearChange}`)
     } else {
       console.log(`历史数据为空, 跳过涨跌幅计算`)
@@ -412,7 +436,7 @@ app.get('/api/funds/:code', async (req, res) => {
       estimateChange: estimate.estimateChange,
       navDate: estimate.navDate,
       estimateTime: estimate.estimateTime,
-      dayChange: estimate.lastChange,
+      dayChange,
       weekChange: weekChange,
       monthChange: monthChange,
       yearChange: yearChange,

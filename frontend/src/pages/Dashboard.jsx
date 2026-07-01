@@ -7,7 +7,8 @@ import ExportModal from '../components/ExportModal'
 import { useFundRealtime } from '../hooks/useWebSocket'
 
 const StatCard = ({ title, value, change, icon: Icon, color = 'blue', loading = false }) => {
-  const isPositive = Number(change) >= 0
+  const hasChange = change !== null && change !== undefined && Number.isFinite(Number(change))
+  const isPositive = hasChange && Number(change) >= 0
   const colorClasses = {
     green: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400',
     blue: 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400',
@@ -28,12 +29,20 @@ const StatCard = ({ title, value, change, icon: Icon, color = 'blue', loading = 
       ) : (
         <div className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-mono">{value}</div>
       )}
-      <div className={`flex items-center mt-2 text-sm font-medium ${isPositive ? 'text-stock-up' : 'text-stock-down'}`}>
-        {isPositive ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
-        <span className="font-mono">{change}%</span>
+      <div className={`flex items-center mt-2 text-sm font-medium ${
+        !hasChange ? 'text-gray-400' : isPositive ? 'text-stock-up' : 'text-stock-down'
+      }`}>
+        {hasChange && (isPositive ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />)}
+        <span className="font-mono">{hasChange ? `${Number(change).toFixed(2)}%` : '--'}</span>
       </div>
     </div>
   )
+}
+
+const formatChangeValue = (value) => {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '--'
+  const number = Number(value)
+  return `${number >= 0 ? '+' : ''}${number.toFixed(2)}%`
 }
 
 const FundRankingTable = () => {
@@ -465,20 +474,27 @@ const Dashboard = () => {
   const hasCustomAmounts = Object.keys(holdingsAmounts).length > 0
 
   const calculateWeightedChange = (field) => {
-    if (funds.length === 0) return '0.00'
+    if (funds.length === 0) return null
     if (hasCustomAmounts) {
       let totalAmount = 0
       let weightedSum = 0
       funds.forEach(f => {
         const amount = holdingsAmounts[f.code] || 0
-        if (amount > 0) {
+        const change = Number(f[field])
+        if (amount > 0 && Number.isFinite(change)) {
           totalAmount += amount
-          weightedSum += amount * (Number(f[field]) || 0)
+          weightedSum += amount * change
         }
       })
-      return totalAmount > 0 ? (weightedSum / totalAmount).toFixed(2) : '0.00'
+      return totalAmount > 0 ? (weightedSum / totalAmount).toFixed(2) : null
     }
-    return (funds.reduce((sum, f) => sum + (Number(f[field]) || 0), 0) / funds.length).toFixed(2)
+    const validChanges = funds
+      .map(f => Number(f[field]))
+      .filter(value => Number.isFinite(value))
+
+    return validChanges.length > 0
+      ? (validChanges.reduce((sum, value) => sum + value, 0) / validChanges.length).toFixed(2)
+      : null
   }
 
   const weekChange = calculateWeightedChange('weekChange')
@@ -539,24 +555,24 @@ const Dashboard = () => {
           loading={loading}
         />
         <StatCard
-          title="周收益"
-          value={`${weekChange >= 0 ? '+' : ''}${weekChange}%`}
+          title="近7日净值涨跌"
+          value={formatChangeValue(weekChange)}
           change={weekChange}
           icon={TrendingUp}
           color="blue"
           loading={loading}
         />
         <StatCard
-          title="月收益"
-          value={`${monthChange >= 0 ? '+' : ''}${monthChange}%`}
+          title="近30日净值涨跌"
+          value={formatChangeValue(monthChange)}
           change={monthChange}
           icon={BarChart3}
           color="purple"
           loading={loading}
         />
         <StatCard
-          title="年收益"
-          value={`${yearChange >= 0 ? '+' : ''}${yearChange}%`}
+          title="近1年净值涨跌"
+          value={formatChangeValue(yearChange)}
           change={yearChange}
           icon={PieChart}
           color="orange"
