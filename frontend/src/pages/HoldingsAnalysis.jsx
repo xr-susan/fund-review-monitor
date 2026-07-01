@@ -9,6 +9,8 @@ import HoldingsTrendChart from '../components/HoldingsTrendChart'
 
 const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#6366f1']
 
+const isFiniteNumber = (value) => Number.isFinite(Number(value))
+
 // 通用图表样式
 const chartTooltipStyle = {
   backgroundColor: '#FFFFFF',
@@ -19,9 +21,11 @@ const chartTooltipStyle = {
 
 const HoldingsTable = ({ fund, loading }) => {
   const getRiskTag = (stock) => {
-    const isHigh = stock.change > 2
-    const isLow = stock.change < -2
-    const isHighPE = stock.pe > 30
+    const change = Number(stock.change)
+    const pe = Number(stock.pe)
+    const isHigh = Number.isFinite(change) && change > 2
+    const isLow = Number.isFinite(change) && change < -2
+    const isHighPE = Number.isFinite(pe) && pe > 30
 
     return (
       <div className="flex space-x-1">
@@ -40,6 +44,7 @@ const HoldingsTable = ({ fund, loading }) => {
             🟡
           </span>
         )}
+        {!isHigh && !isLow && !isHighPE && <span className="text-gray-300">--</span>}
       </div>
     )
   }
@@ -93,15 +98,15 @@ const HoldingsTable = ({ fund, loading }) => {
                 </div>
               </td>
               <td className="py-3 px-2 text-right text-gray-900">
-                ¥{stock.price?.toFixed(2) || '--'}
+                {stock.price != null ? `¥${Number(stock.price).toFixed(2)}` : '--'}
               </td>
               <td className={`py-3 px-2 text-right font-medium ${
-                (stock.change || 0) >= 0 ? 'text-stock-up' : 'text-stock-down'
+                (Number(stock.change) || 0) >= 0 ? 'text-stock-up' : 'text-stock-down'
               }`}>
-                {stock.change ? `${stock.change >= 0 ? '+' : ''}${stock.change.toFixed(2)}%` : '--'}
+                {stock.change != null ? `${Number(stock.change) >= 0 ? '+' : ''}${Number(stock.change).toFixed(2)}%` : '--'}
               </td>
               <td className="py-3 px-2 text-right text-gray-600">
-                {stock.pe?.toFixed(1) || '--'}
+                {stock.pe != null ? Number(stock.pe).toFixed(1) : '--'}
               </td>
               <td className="py-3 px-2 text-center">{getRiskTag(stock)}</td>
             </tr>
@@ -388,15 +393,20 @@ const HoldingsAnalysis = () => {
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <div className="text-sm text-gray-500 mb-1">平均市盈率</div>
                   <div className="text-2xl font-bold text-gray-900">
-                    {currentHoldings.length > 0
-                      ? (currentHoldings.reduce((sum, h) => sum + (h.pe || 0), 0) / currentHoldings.length).toFixed(1)
+                    {currentHoldings.some(h => isFiniteNumber(h.pe))
+                      ? (
+                          currentHoldings
+                            .filter(h => isFiniteNumber(h.pe))
+                            .reduce((sum, h) => sum + Number(h.pe), 0) /
+                          currentHoldings.filter(h => isFiniteNumber(h.pe)).length
+                        ).toFixed(1)
                       : '--'}
                   </div>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <div className="text-sm text-gray-500 mb-1">今日上涨股票</div>
                   <div className="text-2xl font-bold text-stock-up">
-                    {currentHoldings.filter(h => (h.change || 0) > 0).length} / {currentHoldings.length}
+                    {currentHoldings.filter(h => isFiniteNumber(h.change) && Number(h.change) > 0).length} / {currentHoldings.length}
                   </div>
                 </div>
               </div>
@@ -435,14 +445,14 @@ const HoldingsAnalysis = () => {
               <div className="p-3 bg-gray-50 rounded-lg">
                 <div className="text-sm text-gray-500 mb-1">高PE股票</div>
                 <div className="text-xl font-bold text-amber-600">
-                  {currentHoldings.filter(h => (h.pe || 0) > 30).length} 只
+                  {currentHoldings.filter(h => isFiniteNumber(h.pe) && Number(h.pe) > 30).length} 只
                 </div>
                 <div className="text-xs text-gray-400 mt-1">PE &gt; 30 的股票数量</div>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
                 <div className="text-sm text-gray-500 mb-1">今日下跌股票</div>
                 <div className="text-xl font-bold text-stock-down">
-                  {currentHoldings.filter(h => (h.change || 0) < 0).length} 只
+                  {currentHoldings.filter(h => isFiniteNumber(h.change) && Number(h.change) < 0).length} 只
                 </div>
                 <div className="text-xs text-gray-400 mt-1">今日下跌的持仓股票</div>
               </div>

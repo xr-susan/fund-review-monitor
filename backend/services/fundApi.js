@@ -262,12 +262,12 @@ export async function getFundHoldings(fundCode) {
 export async function getStockPrice(stockCode) {
   const { data } = await requestFirstAvailable([
     {
-      name: 'sina-stock',
-      fetch: () => getSinaStockPrice(stockCode)
-    },
-    {
       name: 'eastmoney-stock',
       fetch: () => getEastmoneyStockPrice(stockCode)
+    },
+    {
+      name: 'sina-stock',
+      fetch: () => getSinaStockPrice(stockCode)
     }
   ])
 
@@ -311,10 +311,11 @@ async function getSinaStockPrice(stockCode) {
           change: parseFloat(change.toFixed(2)),
           changeAmount: parseFloat((currentPrice - yesterdayClose).toFixed(2)),
           yesterdayClose: yesterdayClose,
-          pe: 0, // 新浪接口不直接提供PE
-          pb: 0,
+          pe: null, // 新浪接口不直接提供PE
+          pb: null,
           marketCap: 0,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          dataSource: 'sina-stock'
         }
       }
     }
@@ -323,46 +324,61 @@ async function getSinaStockPrice(stockCode) {
 }
 
 async function getEastmoneyStockPrice(stockCode) {
-  const secid = `${stockCode.startsWith('6') ? '1' : '0'}.${stockCode}`
-  const response = await axios.get('https://push2.eastmoney.com/api/qt/stock/get', {
-    params: {
-      secid,
-      fields: 'f43,f44,f45,f46,f47,f48,f57,f58,f60,f168,f169'
-    },
-    headers: {
-      ...DEFAULT_HEADERS,
-      Referer: 'https://quote.eastmoney.com/'
-    },
-    timeout: 10000
-  })
+  const candidates = getEastmoneyStockCandidates(stockCode)
+  let lastError = null
 
-  const quote = response.data?.data
-  if (!quote) {
-    throw new Error('Eastmoney stock quote returned no usable data')
+  for (const candidate of candidates) {
+    try {
+      const response = await axios.get('https://push2.eastmoney.com/api/qt/stock/get', {
+        params: {
+          secid: candidate.secid,
+          fields: 'f43,f44,f45,f46,f47,f48,f57,f58,f60,f162,f169,f170'
+        },
+        headers: {
+          ...DEFAULT_HEADERS,
+          Referer: 'https://quote.eastmoney.com/'
+        },
+        timeout: 10000
+      })
+
+      const quote = response.data?.data
+      if (!quote) {
+        lastError = new Error(`Eastmoney stock quote returned no usable data for ${candidate.secid}`)
+        continue
+      }
+
+      const price = normalizeMarketPrice(quote.f43, candidate.priceScale)
+      const yesterdayClose = normalizeMarketPrice(quote.f60, candidate.priceScale)
+      if (!price || !yesterdayClose) {
+        lastError = new Error(`Eastmoney stock quote returned empty price for ${candidate.secid}`)
+        continue
+      }
+
+      return {
+        code: stockCode,
+        name: quote.f58 || '',
+        price,
+        open: normalizeMarketPrice(quote.f46, candidate.priceScale),
+        high: normalizeMarketPrice(quote.f44, candidate.priceScale),
+        low: normalizeMarketPrice(quote.f45, candidate.priceScale),
+        volume: quote.f47 || 0,
+        amount: quote.f48 || 0,
+        change: normalizeEastmoneyPercent(quote.f170),
+        changeAmount: normalizeMarketPrice(quote.f169, candidate.priceScale),
+        yesterdayClose,
+        pe: normalizeEastmoneyRatio(quote.f162),
+        pb: null,
+        marketCap: 0,
+        timestamp: new Date().toISOString(),
+        dataSource: 'eastmoney-stock',
+        market: candidate.market
+      }
+    } catch (error) {
+      lastError = error
+    }
   }
 
-  const price = normalizeEastmoneyPrice(quote.f43)
-  const yesterdayClose = normalizeEastmoneyPrice(quote.f60)
-  const change = yesterdayClose > 0 ? ((price - yesterdayClose) / yesterdayClose * 100) : 0
-
-  return {
-    code: stockCode,
-    name: quote.f58 || '',
-    price,
-    open: normalizeEastmoneyPrice(quote.f46),
-    high: normalizeEastmoneyPrice(quote.f44),
-    low: normalizeEastmoneyPrice(quote.f45),
-    volume: quote.f47 || 0,
-    amount: quote.f48 || 0,
-    change: parseFloat(change.toFixed(2)),
-    changeAmount: normalizeEastmoneyPrice(quote.f169),
-    yesterdayClose,
-    pe: normalizeEastmoneyPrice(quote.f168),
-    pb: 0,
-    marketCap: 0,
-    timestamp: new Date().toISOString(),
-    dataSource: 'eastmoney-stock'
-  }
+  throw lastError || new Error('Eastmoney stock quote returned no usable data')
 }
 
 function normalizeEastmoneyPrice(value) {
@@ -370,6 +386,52 @@ function normalizeEastmoneyPrice(value) {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return 0
   return parseFloat((numeric / 100).toFixed(2))
+}
+
+function normalizeMarketPrice(value, scale) {
+  if (value === undefined || value === null || value === '-') return null
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return parseFloat((numeric / scale).toFixed(3))
+}
+
+function normalizeEastmoneyPercent(value) {
+  if (value === undefined || value === null || value === '-') return null
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return parseFloat((numeric / 100).toFixed(2))
+}
+
+function normalizeEastmoneyRatio(value) {
+  if (value === undefined || value === null || value === '-' || Number(value) <= 0) return null
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return parseFloat((numeric / 100).toFixed(2))
+}
+
+function getEastmoneyStockCandidates(stockCode) {
+  const code = String(stockCode || '').trim().toUpperCase()
+
+  if (/^\d{5}$/.test(code)) {
+    return [
+      { secid: `116.${code}`, market: 'HK', priceScale: 10000 },
+      { secid: `128.${code}`, market: 'HK', priceScale: 10000 }
+    ]
+  }
+
+  if (/^[A-Z.]+$/.test(code)) {
+    return [
+      { secid: `105.${code}`, market: 'US', priceScale: 1000 },
+      { secid: `106.${code}`, market: 'US', priceScale: 1000 },
+      { secid: `107.${code}`, market: 'US', priceScale: 1000 }
+    ]
+  }
+
+  return [{
+    secid: `${code.startsWith('6') ? '1' : '0'}.${code}`,
+    market: code.startsWith('6') ? 'SH' : 'SZ',
+    priceScale: 100
+  }]
 }
 
 /**

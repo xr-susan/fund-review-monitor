@@ -476,10 +476,10 @@ app.get('/api/funds/:code/holdings', async (req, res) => {
       const priceData = prices.find(p => p.code === holding.code)
       return {
         ...holding,
-        price: priceData?.price || 0,
-        change: priceData?.change || 0,
-        pe: priceData?.pe || 0,
-        pb: priceData?.pb || 0
+        price: priceData?.price ?? null,
+        change: priceData?.change ?? null,
+        pe: priceData?.pe ?? null,
+        pb: priceData?.pb ?? null
       }
     })
 
@@ -694,9 +694,9 @@ app.get('/api/export/holdings/:code', async (req, res) => {
       const priceData = prices.find(p => p.code === holding.code)
       return {
         ...holding,
-        price: priceData?.price || 0,
-        change: priceData?.change || 0,
-        pe: priceData?.pe || 0
+        price: priceData?.price ?? null,
+        change: priceData?.change ?? null,
+        pe: priceData?.pe ?? null
       }
     })
 
