@@ -94,8 +94,8 @@ export function createTestUser(db, overrides = {}) {
  */
 export function createTestNote(db, userId, overrides = {}) {
   const defaults = {
-    fund_code: '110011',
-    fund_name: '易方达中小盘混合',
+    fund_code: '012922',
+    fund_name: '易方达全球成长精选混合(QDII)人民币C',
     type: 'buy',
     date: '2024-01-10',
     reason: '看好消费复苏',

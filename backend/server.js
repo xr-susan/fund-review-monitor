@@ -67,7 +67,7 @@ const server = createServer(app)
 const wss = setupWebSocket(server)
 
 // 默认自选基金列表（用于新用户）
-const DEFAULT_FUNDS = ['110011', '003834', '161725', '005827', '012414']
+const DEFAULT_FUNDS = ['012922', '025209', '011452', '024239']
 
 // 缓存数据
 const cache = {

@@ -230,7 +230,7 @@ const AddFundModal = ({ isOpen, onClose, onAdd }) => {
                 type="text"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
-                placeholder="请输入6位基金代码，如 110011"
+                placeholder="请输入6位基金代码，如 012922"
                 className="input-field w-full"
                 maxLength={6}
               />
@@ -239,12 +239,10 @@ const AddFundModal = ({ isOpen, onClose, onAdd }) => {
             <div className="p-4 bg-primary-50 rounded-lg border border-primary-100">
               <div className="text-sm font-medium text-primary-700 mb-2">常用基金代码</div>
               <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                <div>110011 - 易方达中小盘</div>
-                <div>003834 - 华夏能源革新</div>
-                <div>161725 - 招商中证白酒</div>
-                <div>005827 - 易方达蓝筹精选</div>
-                <div>012414 - 招商中证白酒C</div>
-                <div>001632 - 天弘创新驱动</div>
+                <div>012922 - 易方达全球成长精选C</div>
+                <div>025209 - 永赢先锋半导体智选C</div>
+                <div>011452 - 华泰柏瑞质量成长C</div>
+                <div>024239 - 华夏全球科技先锋C</div>
               </div>
             </div>
 
