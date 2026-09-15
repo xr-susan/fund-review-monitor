@@ -1,5 +1,9 @@
 # 基金复盘监控系统
 
+[![CI](https://github.com/xr-susan/fund-review-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/xr-susan/fund-review-monitor/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](package.json)
+
 一个面向个人投资复盘的基金观察与记录工具。项目把自选基金、净值走势、持仓分析、基准对比、复盘笔记和 CSV 导出放在同一个工作台里，适合用来沉淀自己的基金观察方法。
 
 > 本项目仅用于学习和研究，不构成任何投资建议。基金和股票数据来自第三方公开接口，可能存在延迟、缺失或格式变化。
@@ -69,7 +73,25 @@ npm run dev:frontend
 
 ## 界面预览
 
+目前仓库里只有登录页的截图：
+
 ![登录页截图](docs/screenshots/login.png)
+
+其余页面尚未截图。下表列出值得补充的页面与建议的文件名，截图请自行运行项目后手动采集，统一放在 `docs/screenshots/` 目录下。
+
+| 页面 | 建议文件名 | 内容说明 | 状态 |
+| --- | --- | --- | --- |
+| 登录页 | `docs/screenshots/login.png` | 登录表单与测试账户提示 | 已提供 |
+| 仪表板 | `docs/screenshots/dashboard.png` | 核心指标卡片、基准指数、净值走势与涨跌排行 | 待补充 |
+| 基金监控 | `docs/screenshots/fund-monitor.png` | 自选基金列表、搜索与添加 | 待补充 |
+| 持仓分析 | `docs/screenshots/holdings-analysis.png` | 重仓股、集中度与风险提示 | 待补充 |
+| 投资组合 | `docs/screenshots/portfolio-analysis.png` | 组合结构分析与持仓金额设置 | 待补充 |
+| 对标分析 | `docs/screenshots/benchmark-compare.png` | 基金与基准指数对比 | 待补充 |
+| 收益计算器 | `docs/screenshots/return-calculator.png` | 收益与持有周期试算 | 待补充 |
+| 复盘笔记 | `docs/screenshots/notes-center.png` | 买卖理由、预期收益与执行结果记录 | 待补充 |
+| 预警设置 | `docs/screenshots/alert-settings.png` | 告警规则与通知渠道配置 | 待补充 |
+
+> 采集方式：本地启动前后端（`npm run dev:backend` + `npm run dev:frontend`），访问 http://localhost:3001 并使用默认管理员账号登录后逐页截图。为避免泄露个人持仓数据，建议使用演示账号或清空自选列表后再截图。
 
 更多演示方式见 [docs/demo.md](docs/demo.md)。
 
@@ -87,6 +109,8 @@ docker compose up --build
 ```bash
 npm run install:all      # 安装前后端依赖
 npm test                 # 运行后端测试
+npm run test:frontend    # 运行前端组件测试
+npm run test:e2e         # 运行前端 Playwright 端到端测试
 npm run build            # 构建前端
 npm run dev:backend      # 启动后端开发服务
 npm run dev:frontend     # 启动前端开发服务
@@ -116,9 +140,12 @@ npm run dev:frontend     # 启动前端开发服务
 ```text
 fund-review-monitor/
   backend/      Express API, SQLite database, auth, cache, tests
-  frontend/     React app, pages, components, API services
+  frontend/     React app, pages, components, API services, Playwright e2e
+  docs/         架构说明与演示文档
   .github/      CI workflow
 ```
+
+架构细节（请求链路、认证流程、缓存与数据源降级、数据库表结构、WebSocket 协议）见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 路线图
 
